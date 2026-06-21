@@ -9,28 +9,28 @@ import numpy as np
 # --- CONFIGURATION ---
 MPC_CONFIG = {
     "dt": 0.1,
-    "horizon": 35,
-    "near_goal_distance": 1.5,
+    "horizon": 18,  # Reduced horizon for speed
+    "near_goal_distance": 1.0,
 }
 
-# Expanded grid for better precision
+# Simplified grid for faster computation
 CONTROL_GRID = {
-    "slow_speeds": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-    "cruise_speeds": [0.5, 0.8, 1.1, 1.4, 1.7, 2.0, 2.3, 2.6, 2.9, 3.2, 3.5, 4.0, 4.5],
-    "turn_rates": [-1.5, -1.2, -0.9, -0.6, -0.3, 0.0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.0],
+    "slow_speeds": [0.0, 0.4, 0.8],
+    "cruise_speeds": [0.8, 1.2, 1.6, 2.0, 2.4],
+    "turn_rates": [-0.6, -0.3, 0.0, 0.3, 0.6],
 }
 
-# Tuned for "Time to Goal" (minimized travel time)
+# Tuned for a balance between speed and runtime
 WEIGHTS = {
-    "goal_position": 0.8,
+    "goal_position": 1.2,
     "goal_heading": 0.05,
-    "turn_rate": 0.01,
-    "terminal_goal": 36.0,
+    "turn_rate": 0.03,
+    "terminal_goal": 30.0,
     "collision": 8000.0,
     "collision_depth": 1600.0,
-    "near_obstacle": 25.0,
-    "far_obstacle": 1.2,
-    "stopping": 2.0,
+    "near_obstacle": 18.0,
+    "far_obstacle": 0.8,
+    "stopping": 10.0,
 }
 
 SAFETY = {
@@ -83,7 +83,7 @@ def candidate_controls(
     heading_error = angle_difference(target_heading, state[2])
     proportional_turn = clamp(2.0 * heading_error, -1.0, 1.0)
 
-    turn_rates = CONTROL_GRID["turn_rates"]  # Use the full turn rate grid
+    turn_rates = CONTROL_GRID["turn_rates"]  # Smaller turnrate grid
     turn_rates = np.append(turn_rates, [proportional_turn])
     turn_rates = np.unique(turn_rates)
 
@@ -123,15 +123,11 @@ def evaluate_rollout(
         total_cost += WEIGHTS["goal_heading"] * heading_error
         total_cost += WEIGHTS["turn_rate"] * abs(predicted_control[1])
 
-        # Obstacle Collision Check and Braking
         for obstacle in active_obstacles:
             predicted_obstacle = predict_obstacle(obstacle, step_index * float(MPC_CONFIG["dt"]))
             clearance = rectangle_clearance(
                 predicted_state, predicted_obstacle, robot_radius
             )
-            if clearance < 0.3 * robot_radius:  # Proactive Braking
-                total_cost += 500.0  # Add a penalty for near collision
-
             total_cost += collision_cost(clearance)
 
     terminal_distance = float(np.linalg.norm(goal[:2] - predicted_state[:2]))
