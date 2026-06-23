@@ -38,11 +38,11 @@ CONTROL_GRID = {
 # Cost weights. Larger values make that term matter more during rollout
 # scoring. These are the first numbers worth tuning.
 WEIGHTS = {
-    "goal_position": 1.6,
-    "goal_heading": 0.08,
-    "turn_rate": 0.05,
+    "goal_position": 2,
+    "goal_heading": 0.2,
+    "turn_rate": 0.02,
     "terminal_goal": 36.0,
-    "collision": 12000.0,
+    "collision": 10000.0,
     "collision_depth": 2000.0,
     "near_obstacle": 18.0,
     "far_obstacle": 0.8,
@@ -141,18 +141,25 @@ def evaluate_rollout(
 ) -> float:
     predicted_state = state.copy()
     predicted_control = previous_control.copy()
+    
+    # Create a local copy of the control so we can modify it during the timeline
+    current_request = requested_control.copy() 
     total_cost = 0.0
 
     for step_index in range(1, int(MPC_CONFIG["horizon"]) + 1):
-        # Rate limits matter in this problem, so the predicted control is
-        # ramped exactly like the simulator will ramp it.
+        
+
         predicted_control = apply_control_limits(
-            requested_control, predicted_control, control_limits
+            current_request, predicted_control, control_limits
         )
         predicted_state = step_unicycle(predicted_state, predicted_control)
 
+        # ... (Keep the rest of your goal distance, obstacle loop, and cost tallying exactly the same from here down) ...
         goal_distance = float(np.linalg.norm(goal[:2] - predicted_state[:2]))
         heading_error = abs(angle_difference(goal[2], predicted_state[2]))
+        if goal_distance < 0.2:
+            total_cost -= 50.0  # Big bonus for hitting it early
+            break
         total_cost += WEIGHTS["goal_position"] * goal_distance
         total_cost += WEIGHTS["goal_heading"] * heading_error
         total_cost += WEIGHTS["turn_rate"] * abs(predicted_control[1])
